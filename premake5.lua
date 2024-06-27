@@ -10,7 +10,7 @@ end
 if(MM_PATH == nil) then
 	error("INVALID METAMOD PATH")
 end
-
+echo "测试"
 workspace "StripperCS2"
 	configurations { "Debug", "Release" }
 	platforms {
