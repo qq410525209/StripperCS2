@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            premake_url: "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha15/premake-5.0.0-alpha15-linux.tar.gz"
+            hl2sdk_path: "C:/absolute/path/to/hl2sdk-root/hl2sdk-cs2"
+            mmsource_path: "C:/absolute/path/to/metamod-source"
+          - os: windows-latest
+            premake_url: "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha15/premake-5.0.0-alpha15-windows.zip"
+            hl2sdk_path: "C:/absolute/path/to/hl2sdk-root/hl2sdk-cs2"
+            mmsource_path: "C:/absolute/path/to/metamod-source"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set environment variables
+        run: |
+          echo "HL2SDKCS2=${{ matrix.hl2sdk_path }}" >> $GITHUB_ENV
+          echo "MMSOURCE112=${{ matrix.mmsource_path }}" >> $GITHUB_ENV
+
+      - name: Setup Premake5
+        run: |
+          if [[ ${{ matrix.os }} == 'ubuntu-latest' ]]; then
+            wget ${{ matrix.premake_url }} -O premake5.tar.gz
+            tar -xzf premake5.tar.gz
+            sudo mv premake5 /usr/local/bin/
+          elif [[ ${{ matrix.os }} == 'windows-latest' ]]; then
+            curl -L ${{ matrix.premake_url }} -o premake5.zip
+            unzip premake5.zip -d premake5
+            move premake5\premake5.exe .
+          fi
+
+      - name: Generate build files
+        run: |
+          if [[ ${{ matrix.os }} == 'ubuntu-latest' ]]; then
+            premake5 gmake2
+          elif [[ ${{ matrix.os }} == 'windows-latest' ]]; then
+            premake5 vs2019
+          fi
+
+      - name: Build project on Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          make -C build
+
+      - name: Build project on Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          MSBuild.exe build\StripperCS2.sln /property:Configuration=Release
