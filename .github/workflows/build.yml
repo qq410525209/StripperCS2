@@ -1,0 +1,108 @@
+name: Build StripperCS2
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [created]
+
+env:
+  PREMAKE_VERSION: "5.0.0-beta2"
+  HL2SDKCS2: ${{ github.workspace }}/hl2sdk
+  MMSOURCE112: ${{ github.workspace }}/metamod-source
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        configuration: [Release]
+        
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+        
+    # 下载HL2SDK-CS2
+    - name: Download HL2SDK-CS2
+      run: |
+        git clone --depth=1 --branch=cs2 https://github.com/alliedmodders/hl2sdk.git
+      
+    - name: Download MetaMod:Source
+      run: |
+        git clone --depth=1 https://github.com/alliedmodders/metamod-source.git
+        
+    # Windows特定步骤
+    - name: Setup MSBuild (Windows)
+      if: runner.os == 'Windows'
+      uses: microsoft/setup-msbuild@v1.1
+      
+    - name: Download Premake5 (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        curl -L -o premake5.zip https://github.com/premake/premake-core/releases/download/v${{ env.PREMAKE_VERSION }}/premake-${{ env.PREMAKE_VERSION }}-windows.zip
+        7z x premake5.zip
+        
+    # Linux特定步骤
+    - name: Download Premake5 (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        wget https://github.com/premake/premake-core/releases/download/v${{ env.PREMAKE_VERSION }}/premake-${{ env.PREMAKE_VERSION }}-linux.tar.gz
+        tar xvzf premake-${{ env.PREMAKE_VERSION }}-linux.tar.gz
+        chmod +x premake5
+        
+    - name: Install Linux Dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install -y gcc-multilib g++-multilib libc6-dev-i386
+
+    # 构建依赖库
+    - name: Build Dependencies
+      run: |
+        git submodule update --init --recursive
+        
+    # 生成项目文件并构建
+    - name: Build Windows
+      if: runner.os == 'Windows'
+      run: |
+        ./premake5 vs2022
+        msbuild /m /p:Configuration=${{ matrix.configuration }} build/StripperCS2.sln
+        
+    - name: Build Linux
+      if: runner.os == 'Linux'
+      run: |
+        ./premake5 gmake2
+        make -C build config=${{ matrix.configuration }}_linux64 -j$(nproc)
+        
+    # 整理构建产物
+    - name: Prepare Artifacts
+      run: |
+        mkdir -p dist
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          cp bin/${{ matrix.configuration }}/*.dll dist/
+        else
+          cp bin/${{ matrix.configuration }}/*.so dist/
+        fi
+      shell: bash
+        
+    # 上传构建产物
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: StripperCS2-${{ runner.os }}-${{ matrix.configuration }}
+        path: dist/*
+
+    # 发布版本
+    - name: Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
