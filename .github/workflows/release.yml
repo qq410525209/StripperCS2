@@ -1,0 +1,67 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    container: 
+      image: ubuntu:20.04
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        
+    - name: Install Dependencies
+      run: |
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential git cmake gcc-multilib g++-multilib wget
+        
+    - name: Download Premake5
+      run: |
+        wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
+        tar xvzf premake-5.0.0-beta2-linux.tar.gz
+        chmod +x premake5
+        mv premake5 vendor/
+        
+    - name: Setup Environment
+      run: |
+        echo "HL2SDKCS2=$GITHUB_WORKSPACE/sdk" >> $GITHUB_ENV
+        echo "MMSOURCE112=$GITHUB_WORKSPACE/metamod" >> $GITHUB_ENV
+        
+    - name: Download HL2SDK-CS2
+      run: |
+        git clone --depth=1 https://github.com/alliedmodders/hl2sdk.git -b cs2 sdk
+        
+    - name: Download MetaMod:Source
+      run: |
+        git clone --depth=1 https://github.com/alliedmodders/metamod-source.git -b 2.x-dev metamod
+        
+    - name: Generate Project
+      run: |
+        ./vendor/premake5 gmake2
+        
+    - name: Build
+      run: |
+        cd build
+        make config=release_linux64
+        
+    - name: Prepare Artifacts
+      run: |
+        mkdir -p dist/addons/stripper
+        cp bin/Release/StripperCS2.so dist/addons/stripper/
+        cp schema.json dist/addons/stripper/
+        
+    - name: Create Archive
+      run: |
+        cd dist && tar -czf ../stripper-linux.tar.gz .
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: stripper-linux.tar.gz
+        generate_release_notes: true
