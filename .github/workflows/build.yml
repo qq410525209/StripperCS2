@@ -27,68 +27,49 @@ jobs:
       run: |
         git clone --depth=1 --branch=cs2 https://github.com/alliedmodders/hl2sdk.git
       
+    # 下载MetaMod:Source
     - name: Download MetaMod:Source
       run: |
         git clone --depth=1 https://github.com/alliedmodders/metamod-source.git
         
-    # Linux依赖
-    - name: Download Premake5
-      run: |
-        wget https://github.com/premake/premake-core/releases/download/v${{ env.PREMAKE_VERSION }}/premake-${{ env.PREMAKE_VERSION }}-linux.tar.gz
-        tar xvzf premake-${{ env.PREMAKE_VERSION }}-linux.tar.gz
-        chmod +x premake5
+    # 安装Python和pip
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
         
+    # 安装AMBuild
+    - name: Install AMBuild
+      run: |
+        git clone https://github.com/alliedmodders/ambuild.git
+        cd ambuild
+        pip install .
+        cd ..
+        
+    # Linux依赖
     - name: Install Dependencies
       run: |
         sudo dpkg --add-architecture i386
         sudo apt-get update
         sudo apt-get install -y gcc-multilib g++-multilib libc6-dev-i386
 
-    # 生成项目文件
-    - name: Generate Project Files
+    # 生成项目文件并构建
+    - name: Configure and Build
       run: |
-        ./premake5 gmake2
-        
-    # 检查可用的构建配置
-    - name: Check Available Configurations
+        mkdir build && cd build
+        python3 ../configure.py --enable-optimize
+        ambuild
+
+    # 检查并打包输出文件
+    - name: Archive Output Files
       run: |
-        echo "Available configurations:"
-        make -C build --print-data-base | grep "^config"
-        
-    # 检查构建目录结构
-    - name: Check Build Directory
-      run: |
-        ls -la build/
-        cat build/Makefile
-        
-    # 构建项目
-    - name: Build Project
-      run: |
-        make -C build config=release_linux64 verbose=1
-        
-    # 检查输出目录
-    - name: Check Output Directory
-      run: |
-        echo "Checking bin directory:"
-        ls -la bin/
-        echo "Checking bin/Release directory:"
-        ls -la bin/Release/ || true
-        
-    # 打包构建目录和上级目录
-    - name: Archive Directories
-      run: |
-        # 创建临时目录
-        mkdir -p temp_archive
-        # 复制构建目录
-        cp -r build temp_archive/
-        # 复制上级目录（排除一些不必要的目录）
-        cp -r * temp_archive/ 2>/dev/null || true
-        # 打包
-        tar -czf StripperCS2_Build_Full.tar.gz temp_archive/
+        mkdir -p output
+        cp -r build/* output/
+        tar -czf StripperCS2_Output.tar.gz output/
 
     # 上传构建产物
-    - name: Upload Build Archive
+    - name: Upload Build Output
       uses: actions/upload-artifact@v4
       with:
-        name: StripperCS2_Build_Full
-        path: StripperCS2_Build_Full.tar.gz
+        name: StripperCS2_Output
+        path: StripperCS2_Output.tar.gz
