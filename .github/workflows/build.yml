@@ -52,16 +52,18 @@ jobs:
     # 构建项目
     - name: Build Project
       run: |
-        make -C build config=release_linux64 -j$(nproc)
+        make -C build config=Release_linux64
         
-    # 打包构建目录
-    - name: Archive Build Directory
+    # 打包输出文件
+    - name: Archive Output Files
       run: |
-        tar -czf StripperCS2_Build.tar.gz build/
+        mkdir -p output
+        cp bin/Release/* output/ || true
+        tar -czf StripperCS2_Output.tar.gz output/
 
     # 上传构建产物
-    - name: Upload Build Archive
+    - name: Upload Build Output
       uses: actions/upload-artifact@v4
       with:
-        name: StripperCS2_Build
-        path: StripperCS2_Build.tar.gz
+        name: StripperCS2_Output
+        path: StripperCS2_Output.tar.gz
