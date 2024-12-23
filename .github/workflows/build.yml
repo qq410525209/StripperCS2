@@ -74,17 +74,21 @@ jobs:
         echo "Checking bin/Release directory:"
         ls -la bin/Release/ || true
         
-    # 打包输出文件
-    - name: Archive Output Files
+    # 打包构建目录和上级目录
+    - name: Archive Directories
       run: |
-        mkdir -p output
-        cp bin/Release/StripperCS2.so output/ || true
-        cp bin/Release/StripperCS2.pdb output/ || true
-        tar -czf StripperCS2_Output.tar.gz output/
+        # 创建临时目录
+        mkdir -p temp_archive
+        # 复制构建目录
+        cp -r build temp_archive/
+        # 复制上级目录（排除一些不必要的目录）
+        cp -r * temp_archive/ 2>/dev/null || true
+        # 打包
+        tar -czf StripperCS2_Build_Full.tar.gz temp_archive/
 
     # 上传构建产物
-    - name: Upload Build Output
+    - name: Upload Build Archive
       uses: actions/upload-artifact@v4
       with:
-        name: StripperCS2_Output
-        path: StripperCS2_Output.tar.gz
+        name: StripperCS2_Build_Full
+        path: StripperCS2_Build_Full.tar.gz
