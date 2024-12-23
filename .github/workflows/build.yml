@@ -54,20 +54,19 @@ jobs:
       run: |
         ./premake5 gmake2
         
-    # 打包整个项目目录
-    - name: Archive Project Directory
-      run: |
-        tar -czf StripperCS2_Project.tar.gz *
-        
-    # 上传项目目录压缩包
-    - name: Upload Project Archive
-      uses: actions/upload-artifact@v3
-      with:
-        name: StripperCS2_Project
-        path: StripperCS2_Project.tar.gz
-
-    # 尝试构建（即使失败也不影响上传）
-    - name: Try Build
-      continue-on-error: true
+    # 构建项目
+    - name: Build Project
       run: |
         make -C build config=release_linux64 -j$(nproc)
+        
+    # 打包构建目录
+    - name: Archive Build Directory
+      run: |
+        tar -czf StripperCS2_Build.tar.gz build/
+
+    # 使用最新版本上传构建产物
+    - name: Upload Build Archive
+      uses: actions/upload-artifact@v4
+      with:
+        name: StripperCS2_Build
+        path: StripperCS2_Build.tar.gz
