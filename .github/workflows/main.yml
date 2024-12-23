@@ -1,0 +1,101 @@
+name: Build StripperCS2
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  release:
+    types: [created]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux64
+          - os: windows-latest
+            platform: win64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Setup environment variables
+      shell: bash
+      run: |
+        echo "HL2SDKCS2=${{ github.workspace }}/hl2sdk-cs2" >> $GITHUB_ENV
+        echo "MMSOURCE112=${{ github.workspace }}/metamod-source" >> $GITHUB_ENV
+
+    - name: Clone dependencies
+      run: |
+        git clone --depth=1 https://github.com/alliedmodders/hl2sdk-cs2.git
+        git clone --depth=1 https://github.com/alliedmodders/metamod-source.git
+
+    - name: Install premake5 (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
+        tar xvf premake-5.0.0-beta2-linux.tar.gz
+        sudo mv premake5 /usr/local/bin
+
+    - name: Install premake5 (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        curl -L -o premake5.zip https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip
+        7z x premake5.zip
+
+    - name: Generate project files (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: premake5 gmake2
+
+    - name: Generate project files (Windows)
+      if: matrix.os == 'windows-latest'
+      run: ./premake5.exe vs2022
+
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cd build
+        make config=release_x64
+
+    - name: Build (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        msbuild build/StripperCS2.sln /p:Configuration=Release /p:Platform=x64
+
+    - name: Prepare artifacts
+      shell: bash
+      run: |
+        mkdir -p dist/addons/metamod
+        cp bin/Release/StripperCS2.* dist/addons/metamod/
+        cp -r configs dist/addons/StripperCS2
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: StripperCS2-${{ matrix.platform }}
+        path: dist/*
+
+    - name: Create Release Asset
+      if: github.event_name == 'release'
+      shell: bash
+      run: |
+        cd dist
+        zip -r ../StripperCS2-${{ matrix.platform }}.zip *
+
+    - name: Upload Release Asset
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./StripperCS2-${{ matrix.platform }}.zip
+        asset_name: StripperCS2-${{ matrix.platform }}.zip
+        asset_content_type: application/zip
