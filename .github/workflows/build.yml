@@ -44,11 +44,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gcc-multilib g++-multilib libc6-dev-i386
 
-    # 构建依赖库
-    - name: Build Dependencies
-      run: |
-        git submodule update --init --recursive
-        
     # 生成项目文件
     - name: Generate Project Files
       run: |
@@ -64,7 +59,7 @@ jobs:
       run: |
         tar -czf StripperCS2_Build.tar.gz build/
 
-    # 使用最新版本上传构建产物
+    # 上传构建产物
     - name: Upload Build Archive
       uses: actions/upload-artifact@v4
       with:
