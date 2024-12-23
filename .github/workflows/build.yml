@@ -49,16 +49,37 @@ jobs:
       run: |
         ./premake5 gmake2
         
+    # 检查可用的构建配置
+    - name: Check Available Configurations
+      run: |
+        echo "Available configurations:"
+        make -C build --print-data-base | grep "^config"
+        
+    # 检查构建目录结构
+    - name: Check Build Directory
+      run: |
+        ls -la build/
+        cat build/Makefile
+        
     # 构建项目
     - name: Build Project
       run: |
-        make -C build config=Release_linux64
+        make -C build config=release_linux64 verbose=1
+        
+    # 检查输出目录
+    - name: Check Output Directory
+      run: |
+        echo "Checking bin directory:"
+        ls -la bin/
+        echo "Checking bin/Release directory:"
+        ls -la bin/Release/ || true
         
     # 打包输出文件
     - name: Archive Output Files
       run: |
         mkdir -p output
-        cp bin/Release/* output/ || true
+        cp bin/Release/StripperCS2.so output/ || true
+        cp bin/Release/StripperCS2.pdb output/ || true
         tar -czf StripperCS2_Output.tar.gz output/
 
     # 上传构建产物
