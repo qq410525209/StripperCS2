@@ -2,9 +2,9 @@ name: Build StripperCS2
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ master ]
+    branches: [ main, master ]
   release:
     types: [created]
 
@@ -16,8 +16,10 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux64
+            sdk_path: ${{ github.workspace }}/sdk
           - os: windows-latest
             platform: win64
+            sdk_path: ${{ github.workspace }}\sdk
 
     runs-on: ${{ matrix.os }}
 
@@ -25,21 +27,39 @@ jobs:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
+        path: source
 
+    # 创建SDK目录结构
+    - name: Create SDK directory structure
+      run: |
+        mkdir -p sdk
+        cd sdk
+
+    # 克隆必要的SDK
+    - name: Clone HL2SDK-CS2
+      run: |
+        git clone --depth=1 https://github.com/alliedmodders/hl2sdk.git hl2sdk-cs2
+        cd hl2sdk-cs2
+        git checkout cs2
+        cd ..
+
+    - name: Clone MetaMod:Source
+      run: |
+        git clone --depth=1 https://github.com/alliedmodders/metamod-source.git
+
+    # 设置环境变量
     - name: Setup environment variables
       shell: bash
       run: |
-        echo "HL2SDKCS2=${{ github.workspace }}/hl2sdk-cs2" >> $GITHUB_ENV
-        echo "MMSOURCE112=${{ github.workspace }}/metamod-source" >> $GITHUB_ENV
+        echo "HL2SDKCS2=${{ matrix.sdk_path }}/hl2sdk-cs2" >> $GITHUB_ENV
+        echo "MMSOURCE112=${{ matrix.sdk_path }}/metamod-source" >> $GITHUB_ENV
 
-    - name: Clone dependencies
-      run: |
-        git clone --depth=1 https://github.com/alliedmodders/hl2sdk-cs2.git
-        git clone --depth=1 https://github.com/alliedmodders/metamod-source.git
-
-    - name: Install premake5 (Linux)
+    # 安装构建工具
+    - name: Install build tools (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc-multilib g++-multilib
         wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
         tar xvf premake-5.0.0-beta2-linux.tar.gz
         sudo mv premake5 /usr/local/bin
@@ -50,45 +70,65 @@ jobs:
         curl -L -o premake5.zip https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip
         7z x premake5.zip
 
-    - name: Generate project files (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: premake5 gmake2
+    # 生成项目文件
+    - name: Generate project files
+      working-directory: source
+      run: |
+        if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+          premake5 gmake2
+        else
+          ./premake5.exe vs2022
+        fi
+      shell: bash
 
-    - name: Generate project files (Windows)
-      if: matrix.os == 'windows-latest'
-      run: ./premake5.exe vs2022
-
+    # 构建项目
     - name: Build (Linux)
       if: matrix.os == 'ubuntu-latest'
-      run: |
-        cd build
-        make config=release_x64
+      working-directory: source/build
+      run: make config=release_x64
 
     - name: Build (Windows)
       if: matrix.os == 'windows-latest'
+      working-directory: source/build
       run: |
-        msbuild build/StripperCS2.sln /p:Configuration=Release /p:Platform=x64
+        msbuild StripperCS2.sln /p:Configuration=Release /p:Platform=x64
 
+    # 准备发布文件
     - name: Prepare artifacts
       shell: bash
+      working-directory: source
       run: |
         mkdir -p dist/addons/metamod
+        mkdir -p dist/addons/StripperCS2/configs
         cp bin/Release/StripperCS2.* dist/addons/metamod/
-        cp -r configs dist/addons/StripperCS2
+        # 如果有配置文件，复制到configs目录
+        if [ -d "configs" ]; then
+          cp -r configs/* dist/addons/StripperCS2/configs/
+        fi
+        # 复制README和LICENSE如果存在
+        for file in README* LICENSE*; do
+          if [ -f "$file" ]; then
+            cp "$file" dist/
+          fi
+        done
 
+    # 上传构建产物
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
         name: StripperCS2-${{ matrix.platform }}
-        path: dist/*
+        path: source/dist/*
 
+    # 创建发布包
     - name: Create Release Asset
       if: github.event_name == 'release'
       shell: bash
+      working-directory: source
       run: |
         cd dist
         zip -r ../StripperCS2-${{ matrix.platform }}.zip *
 
+    # 上传发布包
     - name: Upload Release Asset
       if: github.event_name == 'release'
       uses: actions/upload-release-asset@v1
@@ -96,6 +136,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./StripperCS2-${{ matrix.platform }}.zip
+        asset_path: source/StripperCS2-${{ matrix.platform }}.zip
         asset_name: StripperCS2-${{ matrix.platform }}.zip
         asset_content_type: application/zip
